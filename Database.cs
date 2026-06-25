@@ -38,6 +38,7 @@ public static class Database
                 account_id   INTEGER NOT NULL,
                 category_id  INTEGER,            -- NULL = uncategorized
                 amount_cents INTEGER NOT NULL,   -- positive = money in, negative = money out
+                kind         TEXT    NOT NULL,   -- Income | Expense | Transfer
                 description  TEXT    NOT NULL,
                 occurred_on  TEXT    NOT NULL,   -- ISO yyyy-MM-dd
                 is_pending   INTEGER NOT NULL    -- 1 = hasn't cleared yet
@@ -55,16 +56,16 @@ public static class Database
         seed.CommandText =
             $"""
             INSERT INTO transactions
-                (account_id, category_id, amount_cents, description, occurred_on, is_pending)
+                (account_id, category_id, amount_cents, kind, description, occurred_on, is_pending)
             VALUES
-                (1, 1,    -60000, 'Monthly rent',           '{thisMonth}', 0),
-                (1, 2,    -30000, 'Grocery run',            '{thisMonth}', 0),
-                (1, 2,     10000, 'Grocery refund',         '{thisMonth}', 0),
-                (1, NULL, -20000, 'Transfer to savings',    '{thisMonth}', 0),
-                (2, NULL,  20000, 'Transfer from checking', '{thisMonth}', 0),
-                (1, 2,    -15000, 'Pending groceries',      '{thisMonth}', 1),
-                (1, NULL,  -5000, 'ATM withdrawal',         '{thisMonth}', 0),
-                (1, 1,    -60000, 'Last month rent',        '{lastMonth}', 0);
+                (1, 1,    -60000, 'Expense',  'Monthly rent',           '{thisMonth}', 0),
+                (1, 2,    -30000, 'Expense',  'Grocery run',            '{thisMonth}', 0),
+                (1, 2,     10000, 'Expense',  'Grocery refund',         '{thisMonth}', 0),
+                (1, NULL, -20000, 'Transfer', 'Transfer to savings',    '{thisMonth}', 0),
+                (2, NULL,  20000, 'Transfer', 'Transfer from checking', '{thisMonth}', 0),
+                (1, 2,    -15000, 'Expense',  'Pending groceries',      '{thisMonth}', 1),
+                (1, NULL,  -5000, 'Expense',  'ATM withdrawal',         '{thisMonth}', 0),
+                (1, 1,    -60000, 'Expense',  'Last month rent',        '{lastMonth}', 0);
             """;
         seed.ExecuteNonQuery();
     }

@@ -18,7 +18,7 @@ app.MapGet("/transactions", () =>
     var cmd = conn.CreateCommand();
     cmd.CommandText =
         """
-        SELECT t.id, a.name, c.name, t.amount_cents, t.description, t.occurred_on, t.is_pending
+        SELECT t.id, a.name, c.name, t.amount_cents, t.description, t.occurred_on, t.is_pending, t.kind
         FROM transactions t
         JOIN accounts a        ON a.id = t.account_id
         LEFT JOIN categories c ON c.id = t.category_id
@@ -37,6 +37,7 @@ app.MapGet("/transactions", () =>
             description = r.GetString(4),
             date = r.GetString(5),
             pending = r.GetInt64(6) == 1,
+            kind = r.GetString(7),
         });
     }
     return Results.Ok(rows);
@@ -44,9 +45,9 @@ app.MapGet("/transactions", () =>
 
 // "How much did I spend this month?"
 //
-// Intentionally NAIVE: sums only negative amounts, across every account, including pending.
-// So it counts a transfer to your own savings as spending, ignores a refund, and includes a
-// charge that hasn't cleared. It returns $1,300; the honest answer is $850. See README.md.
+// Honest calculation: sums only Expense-kind rows that have cleared, over signed amounts so a
+// refund nets against spending. Transfers (your own money moving) and pending charges are
+// excluded. Returns $850. (The naive version returned $1,300; see git tag act3-start.)
 app.MapGet("/summary", (string? month) =>
 {
     month ??= DateTime.Today.ToString("yyyy-MM");
@@ -60,7 +61,8 @@ app.MapGet("/summary", (string? month) =>
         """
         SELECT COALESCE(-SUM(amount_cents), 0)
         FROM transactions
-        WHERE amount_cents < 0
+        WHERE kind = 'Expense'
+          AND is_pending = 0
           AND occurred_on BETWEEN $start AND $end
         """;
     cmd.Parameters.AddWithValue("$start", start);
@@ -81,15 +83,18 @@ app.MapPost("/transactions", (NewTransaction input) =>
     if (string.IsNullOrWhiteSpace(input.Description) || input.AmountCents == 0)
         return Results.BadRequest(new { error = "description and a non-zero amountCents are required" });
 
+    var kind = string.IsNullOrWhiteSpace(input.Kind) ? "Expense" : input.Kind;
+
     using var conn = Database.Open();
     var cmd = conn.CreateCommand();
     cmd.CommandText =
         """
-        INSERT INTO transactions (account_id, category_id, amount_cents, description, occurred_on, is_pending)
-        VALUES (1, $cat, $amt, $desc, $date, $pending)
+        INSERT INTO transactions (account_id, category_id, amount_cents, kind, description, occurred_on, is_pending)
+        VALUES (1, $cat, $amt, $kind, $desc, $date, $pending)
         """;
     cmd.Parameters.AddWithValue("$cat", (object?)input.CategoryId ?? DBNull.Value);
     cmd.Parameters.AddWithValue("$amt", input.AmountCents);
+    cmd.Parameters.AddWithValue("$kind", kind);
     cmd.Parameters.AddWithValue("$desc", input.Description.Trim());
     cmd.Parameters.AddWithValue("$date", DateTime.Today.ToString("yyyy-MM-dd"));
     cmd.Parameters.AddWithValue("$pending", input.IsPending ? 1 : 0);
@@ -103,4 +108,4 @@ app.Run();
 public partial class Program { }
 
 // Body of POST /transactions (the dashboard's add form).
-record NewTransaction(long AmountCents, string Description, long? CategoryId, bool IsPending);
+record NewTransaction(long AmountCents, string Description, long? CategoryId, bool IsPending, string? Kind);
