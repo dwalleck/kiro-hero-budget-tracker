@@ -10,6 +10,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Pin the bundled native SQLite library to a patched build. The version that
+         Microsoft.Data.Sqlite pulls in transitively (2.1.11) bundles SQLite < 3.50.2,
+         which is vulnerable to CVE-2025-6965 (GHSA-2m69-gcr7-jv3q). 3.50.3 bundles the
+         fixed SQLite. This package is the native binary only, so overriding it does not
+         affect the managed SQLitePCLRaw.core/provider stack. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
   </ItemGroup>
 
 </Project>
