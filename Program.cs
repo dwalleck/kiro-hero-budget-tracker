@@ -7,7 +7,9 @@ var app = builder.Build();
 // Start every run from the same rigged demo data.
 Database.Reset();
 
-app.MapGet("/", () => "Budget Tracker — try GET /transactions or GET /summary");
+// Serve the dashboard (wwwroot/index.html) at "/".
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 // List every transaction — the basic surface the app ships with.
 app.MapGet("/transactions", () =>
@@ -73,7 +75,32 @@ app.MapGet("/summary", (string? month) =>
     });
 });
 
+// Record a transaction. The dashboard's "add" form posts here.
+app.MapPost("/transactions", (NewTransaction input) =>
+{
+    if (string.IsNullOrWhiteSpace(input.Description) || input.AmountCents == 0)
+        return Results.BadRequest(new { error = "description and a non-zero amountCents are required" });
+
+    using var conn = Database.Open();
+    var cmd = conn.CreateCommand();
+    cmd.CommandText =
+        """
+        INSERT INTO transactions (account_id, category_id, amount_cents, description, occurred_on, is_pending)
+        VALUES (1, $cat, $amt, $desc, $date, $pending)
+        """;
+    cmd.Parameters.AddWithValue("$cat", (object?)input.CategoryId ?? DBNull.Value);
+    cmd.Parameters.AddWithValue("$amt", input.AmountCents);
+    cmd.Parameters.AddWithValue("$desc", input.Description.Trim());
+    cmd.Parameters.AddWithValue("$date", DateTime.Today.ToString("yyyy-MM-dd"));
+    cmd.Parameters.AddWithValue("$pending", input.IsPending ? 1 : 0);
+    cmd.ExecuteNonQuery();
+    return Results.Created("/transactions", null);
+});
+
 app.Run();
 
 // Exposed so the test project's WebApplicationFactory<Program> can boot the app in-memory.
 public partial class Program { }
+
+// Body of POST /transactions (the dashboard's add form).
+record NewTransaction(long AmountCents, string Description, long? CategoryId, bool IsPending);
