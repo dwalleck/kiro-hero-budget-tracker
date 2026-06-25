@@ -1,0 +1,79 @@
+using System.Globalization;
+using BudgetTracker;
+
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+// Start every run from the same rigged demo data.
+Database.Reset();
+
+app.MapGet("/", () => "Budget Tracker — try GET /transactions or GET /summary");
+
+// List every transaction — the basic surface the app ships with.
+app.MapGet("/transactions", () =>
+{
+    using var conn = Database.Open();
+    var cmd = conn.CreateCommand();
+    cmd.CommandText =
+        """
+        SELECT t.id, a.name, c.name, t.amount_cents, t.description, t.occurred_on, t.is_pending
+        FROM transactions t
+        JOIN accounts a        ON a.id = t.account_id
+        LEFT JOIN categories c ON c.id = t.category_id
+        ORDER BY t.occurred_on, t.id
+        """;
+    using var r = cmd.ExecuteReader();
+    var rows = new List<object>();
+    while (r.Read())
+    {
+        rows.Add(new
+        {
+            id = r.GetInt64(0),
+            account = r.GetString(1),
+            category = r.IsDBNull(2) ? null : r.GetString(2),
+            amount = Money.Format(r.GetInt64(3)),
+            description = r.GetString(4),
+            date = r.GetString(5),
+            pending = r.GetInt64(6) == 1,
+        });
+    }
+    return Results.Ok(rows);
+});
+
+// "How much did I spend this month?"
+//
+// Intentionally NAIVE: sums only negative amounts, across every account, including pending.
+// So it counts a transfer to your own savings as spending, ignores a refund, and includes a
+// charge that hasn't cleared. It returns $1,300; the honest answer is $850. See README.md.
+app.MapGet("/summary", (string? month) =>
+{
+    month ??= DateTime.Today.ToString("yyyy-MM");
+    var start = $"{month}-01";
+    var end = DateTime.Parse(start, CultureInfo.InvariantCulture)
+        .AddMonths(1).AddDays(-1).ToString("yyyy-MM-dd");
+
+    using var conn = Database.Open();
+    var cmd = conn.CreateCommand();
+    cmd.CommandText =
+        """
+        SELECT COALESCE(-SUM(amount_cents), 0)
+        FROM transactions
+        WHERE amount_cents < 0
+          AND occurred_on BETWEEN $start AND $end
+        """;
+    cmd.Parameters.AddWithValue("$start", start);
+    cmd.Parameters.AddWithValue("$end", end);
+    var spentCents = Convert.ToInt64(cmd.ExecuteScalar());
+
+    return Results.Ok(new
+    {
+        month,
+        totalSpent = Money.Format(spentCents),
+        totalSpentCents = spentCents,
+    });
+});
+
+app.Run();
+
+// Exposed so the test project's WebApplicationFactory<Program> can boot the app in-memory.
+public partial class Program { }
