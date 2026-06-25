@@ -97,6 +97,16 @@ app.MapPost("/transactions", (NewTransaction input) =>
     return Results.Created("/transactions", null);
 });
 
+// Mark a pending transaction as cleared. The dashboard's "Mark cleared" button calls this.
+app.MapPost("/transactions/{id}/clear", (long id) =>
+{
+    using var conn = Database.Open();
+    var cmd = conn.CreateCommand();
+    cmd.CommandText = "UPDATE transactions SET is_pending = 0 WHERE id = $id";
+    cmd.Parameters.AddWithValue("$id", id);
+    return cmd.ExecuteNonQuery() == 0 ? Results.NotFound() : Results.NoContent();
+});
+
 app.Run();
 
 // Exposed so the test project's WebApplicationFactory<Program> can boot the app in-memory.

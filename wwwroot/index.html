@@ -30,7 +30,7 @@
 
   <h2>Transactions</h2>
   <table>
-    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="amt">Amount</th></tr></thead>
+    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="amt">Amount</th><th></th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 
@@ -67,6 +67,7 @@
           <td>${t.description}${t.pending ? ' (pending)' : ''}</td>
           <td>${t.category ?? ''}</td>
           <td class="amt">${t.amount}</td>
+          <td>${t.pending ? `<button type="button" class="clear" data-id="${t.id}">Mark cleared</button>` : ''}</td>
         </tr>`).join('');
     }
 
@@ -88,6 +89,12 @@
         }),
       });
       e.target.reset();
+      load();
+    });
+
+    document.getElementById('rows').addEventListener('click', async (e) => {
+      if (!e.target.classList.contains('clear')) return;
+      await fetch(`/transactions/${e.target.dataset.id}/clear`, { method: 'POST' });
       load();
     });
 
